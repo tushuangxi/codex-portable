@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Codex CLI Portable · 配置中心</title>
+<style>
+  :root{
+    --bg:#1a1410; --card:#241c15; --secondary:#2e241a; --muted:#3a2d20;
+    --fg:#f5e6d3; --fg-muted:#b09a80; --border:#f5e6d31f;
+    --accent:#45b8d8; --accent-dim:#3a9db8;
+    --success:#4ade80; --warn:#ffbd38; --danger:#fb6b5b;
+    --font:system-ui,-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+    --mono:'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:var(--font);background:var(--bg);color:var(--fg);line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
+  body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+    background:radial-gradient(ellipse at 15% 0%,rgba(69,184,216,0.10),transparent 55%)}
+  .wrap{max-width:780px;margin:0 auto;padding:32px 20px 64px;position:relative;z-index:1}
+  header{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+  .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(135deg,var(--accent),var(--accent-dim));
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#1a1410;flex-shrink:0}
+  h1{font-size:21px;font-weight:650;letter-spacing:.5px}
+  .sub{color:var(--fg-muted);font-size:13px}
+  .statusbar{display:flex;align-items:center;gap:10px;margin:18px 0 22px;padding:11px 15px;
+    background:var(--card);border:1px solid var(--border);border-radius:12px;font-size:13px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--fg-muted);flex-shrink:0}
+  .dot.on{background:var(--success);box-shadow:0 0 8px var(--success)}
+  .dot.off{background:var(--danger)}
+  .tabs{display:flex;gap:4px;margin-bottom:18px;border-bottom:1px solid var(--border)}
+  .tab{padding:9px 16px;cursor:pointer;color:var(--fg-muted);font-size:14px;border-bottom:2px solid transparent;
+    transition:.15s;user-select:none}
+  .tab:hover{color:var(--fg)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .panel{display:none;animation:fade .2s}
+  .panel.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:16px}
+  .card h2{font-size:15px;font-weight:600;margin-bottom:4px}
+  .card .desc{color:var(--fg-muted);font-size:12.5px;margin-bottom:16px}
+  label{display:block;font-size:13px;margin:14px 0 6px;color:var(--fg)}
+  input,select{width:100%;padding:10px 12px;background:var(--secondary);border:1px solid var(--border);
+    border-radius:9px;color:var(--fg);font-size:14px;font-family:var(--font)}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  input::placeholder{color:var(--fg-muted);opacity:.6}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row>*{flex:1;min-width:0}
+  button{padding:10px 18px;background:var(--accent);color:#1a1410;border:none;border-radius:9px;
+    font-size:14px;font-weight:600;cursor:pointer;transition:.15s;font-family:var(--font)}
+  button:hover{background:var(--accent-dim)}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:transparent;color:var(--fg);border:1px solid var(--border)}
+  button.ghost:hover{background:var(--secondary)}
+  .btns{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+  .provider-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:8px}
+  .pcard{padding:14px;background:var(--secondary);border:1.5px solid var(--border);border-radius:11px;
+    cursor:pointer;transition:.15s}
+  .pcard:hover{border-color:var(--accent-dim)}
+  .pcard.sel{border-color:var(--accent);background:var(--muted)}
+  .pcard .pn{font-size:14px;font-weight:600}
+  .pcard .pnote{font-size:11.5px;color:var(--fg-muted);margin-top:3px}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+    background:var(--card);border:1px solid var(--border);border-radius:11px;padding:13px 22px;font-size:14px;
+    box-shadow:0 8px 30px #0008;transition:.25s;z-index:50;opacity:0}
+  .toast.show{transform:translateX(-50%);opacity:1}
+  .toast.ok{border-color:var(--success)}
+  .toast.err{border-color:var(--danger)}
+  .msg{margin-top:12px;padding:10px 12px;border-radius:9px;font-size:13px;display:none}
+  .msg.ok{display:block;background:#4ade8018;border:1px solid #4ade8044;color:var(--success)}
+  .msg.err{display:block;background:#fb6b5b18;border:1px solid #fb6b5b44;color:var(--danger)}
+  .msg.wait{display:block;background:var(--secondary);border:1px solid var(--border);color:var(--fg-muted)}
+  .steps{display:flex;gap:8px;margin-bottom:22px}
+  .step{flex:1;text-align:center;font-size:12px;color:var(--fg-muted);padding-bottom:8px;border-bottom:2px solid var(--border)}
+  .step.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .step.done{color:var(--success);border-bottom-color:var(--success)}
+  .saved-list{margin-top:8px}
+  .saved-item{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;
+    background:var(--secondary);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;font-size:13.5px}
+  .badge{font-size:11px;padding:2px 8px;border-radius:6px;background:var(--success);color:#1a1410;font-weight:600}
+  .kv{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+  .kv:last-child{border:none}
+  .kv .k{color:var(--fg-muted)}
+  .kv .v{font-family:var(--mono);font-size:12px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  a{color:var(--accent)}
+  .hint{font-size:12px;color:var(--fg-muted);margin-top:6px}
+  code{font-family:var(--mono);background:var(--muted);padding:1px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">盒</div>
+    <div>
+      <h1>Codex CLI Portable</h1>
+      <div class="sub">配置中心 · Config Center</div>
+    </div>
+  </header>
+
+  <div class="statusbar">
+    <span class="dot" id="sdot"></span>
+    <span id="stext">正在加载…</span>
+  </div>
+
+  <div id="onboard" style="display:none">
+    <div class="card">
+      <div class="steps">
+        <div class="step active" id="ob1">1 · 选供应商</div>
+        <div class="step" id="ob2">2 · 填 Key</div>
+        <div class="step" id="ob3">3 · 测试</div>
+        <div class="step" id="ob4">4 · 完成</div>
+      </div>
+
+      <div id="obs1">
+        <h2>选择 API 供应商</h2>
+        <div class="desc">Codex CLI 走 OpenAI 协议，下面的供应商都提供兼容端点。</div>
+        <div class="provider-grid" id="ob-grid"></div>
+        <div class="btns"><button onclick="obNext(2)" id="ob1next" disabled>下一步 →</button></div>
+      </div>
+
+      <div id="obs2" style="display:none">
+        <h2>填写 API Key</h2>
+        <div class="desc" id="ob2desc"></div>
+        <label id="ob-urllabel" style="display:none">Base URL</label>
+        <input id="ob-url" placeholder="https://your-gateway/anthropic" style="display:none">
+        <label>API Key</label>
+        <input id="ob-key" type="password" placeholder="粘贴 API Key">
+        <label id="ob-modellabel">模型 (可选)</label>
+        <select id="ob-model"></select>
+        <input id="ob-modelcustom" placeholder="或手填模型名" style="display:none;margin-top:8px">
+        <div class="btns">
+          <button class="ghost" onclick="obNext(1)">← 上一步</button>
+          <button onclick="obNext(3)">下一步 →</button>
+        </div>
+      </div>
+
+      <div id="obs3" style="display:none">
+        <h2>测试连接</h2>
+        <div class="desc">向供应商发一个最小请求，确认 Key 和端点可用。</div>
+        <div class="msg wait" id="ob-testmsg">点击下方按钮开始测试…</div>
+        <div class="btns">
+          <button class="ghost" onclick="obNext(2)">← 上一步</button>
+          <button onclick="obTest()" id="ob-testbtn">开始测试</button>
+          <button onclick="obNext(4)" id="ob-skipbtn" class="ghost">跳过测试 →</button>
+        </div>
+      </div>
+
+      <div id="obs4" style="display:none">
+        <h2>完成配置</h2>
+        <div class="desc">保存后，关闭本页面回到终端，Codex CLI 会用这套配置启动。</div>
+        <div class="msg ok" id="ob-donemsg" style="display:none"></div>
+        <div class="btns">
+          <button class="ghost" onclick="obNext(3)">← 上一步</button>
+          <button onclick="obSave()" id="ob-savebtn">保存并完成</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="main" style="display:none">
+    <div class="tabs">
+      <div class="tab active" data-tab="model">模型</div>
+      <div class="tab" data-tab="saved">已存供应商</div>
+      <div class="tab" data-tab="data">数据</div>
+      <div class="tab" data-tab="about">关于</div>
+    </div>
+
+    <div class="panel active" data-panel="model">
+      <div class="card">
+        <h2>当前供应商</h2>
+        <div class="desc">修改后点保存即生效，下次启动 Codex CLI 使用新配置。</div>
+        <div class="provider-grid" id="m-grid"></div>
+        <label id="m-urllabel" style="display:none">Base URL</label>
+        <input id="m-url" placeholder="https://your-gateway/anthropic" style="display:none">
+        <label>API Key</label>
+        <input id="m-key" type="password" placeholder="粘贴 API Key">
+        <label>模型 (可选)</label>
+        <select id="m-model"></select>
+        <input id="m-modelcustom" placeholder="或手填模型名" style="display:none;margin-top:8px">
+        <div class="msg" id="m-msg"></div>
+        <div class="btns">
+          <button onclick="mTest()" class="ghost" id="m-testbtn">测试连接</button>
+          <button onclick="mSave()" id="m-savebtn">保存配置</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="saved">
+      <div class="card">
+        <h2>已保存的供应商</h2>
+        <div class="desc">点击切换当前生效的供应商（与 cc-switch GUI 共用同一份配置库）。</div>
+        <div class="saved-list" id="saved-list"></div>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="data">
+      <div class="card">
+        <h2>便携数据</h2>
+        <div class="desc">所有配置、会话都存在便携包的 <code>data/</code> 目录里。</div>
+        <div class="kv"><span class="k">配置库</span><span class="v">data/.codex/auth.json + config.toml</span></div>
+        <div class="kv"><span class="k">Codex 数据</span><span class="v">data/.codex/</span></div>
+        <div class="kv"><span class="k">迁移到新电脑</span><span class="v">整包拷走即可</span></div>
+        <div class="hint">解绑设备：终端运行 <code>./CodexPortable.command --unlock</code></div>
+      </div>
+    </div>
+
+    <div class="panel" data-panel="about">
+      <div class="card">
+        <h2>关于</h2>
+        <div class="kv"><span class="k">项目</span><span class="v">Codex CLI Portable</span></div>
+        <div class="kv"><span class="k">配置中心端口</span><span class="v" id="ab-port"></span></div>
+        <div class="kv"><span class="k">数据隔离</span><span class="v">CODEX_HOME + 符号链接</span></div>
+        <div class="hint">姊妹项目：claude-portable · openclaw-portable · hermes-portable</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let STATE=null, obSel=null, mSel=null;
+
+function toast(msg,kind){const t=document.getElementById('toast');t.textContent=msg;
+  t.className='toast show '+(kind||'');setTimeout(()=>t.className='toast '+(kind||''),2600);}
+
+async function api(path,method,body){
+  const opt={method:method||'GET',headers:{'Content-Type':'application/json'}};
+  if(body)opt.body=JSON.stringify(body);
+  const r=await fetch(path,opt);return r.json();
+}
+
+function fillModels(sel,custom,provider){
+  sel.innerHTML='';
+  const p=STATE.providers_catalog.find(x=>x.id===provider);
+  if(!p||p.custom||!p.models.length){
+    sel.style.display='none';custom.style.display='block';return;
+  }
+  sel.style.display='block';custom.style.display='none';
+  const def=document.createElement('option');def.value='';def.textContent='（默认 / 自动）';sel.appendChild(def);
+  p.models.forEach(m=>{const o=document.createElement('option');o.value=m;o.textContent=m;sel.appendChild(o);});
+}
+
+function renderOnboard(){
+  document.getElementById('onboard').style.display='block';
+  document.getElementById('main').style.display='none';
+  const g=document.getElementById('ob-grid');g.innerHTML='';
+  STATE.providers_catalog.forEach(p=>{
+    const d=document.createElement('div');d.className='pcard';d.dataset.id=p.id;
+    d.innerHTML='<div class="pn">'+p.name+'</div><div class="pnote">'+p.note+'</div>';
+    d.onclick=()=>{obSel=p.id;document.querySelectorAll('#ob-grid .pcard').forEach(x=>x.classList.remove('sel'));
+      d.classList.add('sel');document.getElementById('ob1next').disabled=false;};
+    g.appendChild(d);
+  });
+}
+function obStep(n){[1,2,3,4].forEach(i=>{
+  document.getElementById('obs'+i).style.display=i===n?'block':'none';
+  const s=document.getElementById('ob'+i);s.classList.toggle('active',i===n);
+  if(i<n)s.classList.add('done');else s.classList.remove('done');
+});}
+function obNext(n){
+  if(n===2){
+    const p=STATE.providers_catalog.find(x=>x.id===obSel);
+    document.getElementById('ob2desc').textContent=p.note;
+    const isCustom=p.custom||!p.base_url;
+    document.getElementById('ob-urllabel').style.display=isCustom?'block':'none';
+    document.getElementById('ob-url').style.display=isCustom?'block':'none';
+    document.getElementById('ob-key').placeholder=p.key_hint;
+    fillModels(document.getElementById('ob-model'),document.getElementById('ob-modelcustom'),obSel);
+  }
+  obStep(n);
+}
+async function obTest(){
+  const m=document.getElementById('ob-testmsg');m.className='msg wait';m.textContent='测试中…';
+  document.getElementById('ob-testbtn').disabled=true;
+  const r=await api('/api/test','POST',obPayload());
+  document.getElementById('ob-testbtn').disabled=false;
+  m.className='msg '+(r.ok?'ok':'err');m.textContent=(r.ok?'✓ ':'✗ ')+r.message;
+}
+function obPayload(){
+  const p=STATE.providers_catalog.find(x=>x.id===obSel);
+  const isCustom=p.custom||!p.base_url;
+  const model=(document.getElementById('ob-model').style.display==='none')
+    ?document.getElementById('ob-modelcustom').value:document.getElementById('ob-model').value;
+  return {name:p.name,base_url:isCustom?document.getElementById('ob-url').value:p.base_url,
+    api_key:document.getElementById('ob-key').value,model:model};
+}
+async function obSave(){
+  const r=await api('/api/save','POST',obPayload());
+  if(r.ok){const m=document.getElementById('ob-donemsg');m.style.display='block';
+    m.textContent='✓ 配置已保存！可以关闭此页面回到终端了。';
+    document.getElementById('ob-savebtn').disabled=true;toast('配置已保存','ok');
+    setTimeout(load,1200);
+  }else toast('保存失败: '+(r.error||''),'err');
+}
+
+function renderMain(){
+  document.getElementById('onboard').style.display='none';
+  document.getElementById('main').style.display='block';
+  const g=document.getElementById('m-grid');g.innerHTML='';
+  STATE.providers_catalog.forEach(p=>{
+    const d=document.createElement('div');d.className='pcard';d.dataset.id=p.id;
+    d.innerHTML='<div class="pn">'+p.name+'</div><div class="pnote">'+p.note+'</div>';
+    d.onclick=()=>{mSel=p.id;document.querySelectorAll('#m-grid .pcard').forEach(x=>x.classList.remove('sel'));
+      d.classList.add('sel');mPick(p);};
+    g.appendChild(d);
+  });
+  const sl=document.getElementById('saved-list');sl.innerHTML='';
+  (STATE.saved||[]).forEach(s=>{
+    const d=document.createElement('div');d.className='saved-item';
+    d.innerHTML='<span>'+s.name+'</span>'+(s.active?'<span class="badge">当前</span>':
+      '<button class="ghost" style="padding:5px 12px;font-size:12px" onclick="activate(\''+s.id+'\')">设为当前</button>');
+    sl.appendChild(d);
+  });
+  if(!STATE.saved||!STATE.saved.length)sl.innerHTML='<div class="hint">还没有保存的供应商</div>';
+}
+function mPick(p){
+  const isCustom=p.custom||!p.base_url;
+  document.getElementById('m-urllabel').style.display=isCustom?'block':'none';
+  document.getElementById('m-url').style.display=isCustom?'block':'none';
+  document.getElementById('m-key').placeholder=p.key_hint;
+  fillModels(document.getElementById('m-model'),document.getElementById('m-modelcustom'),p.id);
+}
+function mPayload(){
+  const p=STATE.providers_catalog.find(x=>x.id===mSel);
+  const isCustom=p.custom||!p.base_url;
+  const model=(document.getElementById('m-model').style.display==='none')
+    ?document.getElementById('m-modelcustom').value:document.getElementById('m-model').value;
+  return {name:p.name,base_url:isCustom?document.getElementById('m-url').value:p.base_url,
+    api_key:document.getElementById('m-key').value,model:model};
+}
+async function mTest(){
+  if(!mSel){toast('先选一个供应商','err');return;}
+  const m=document.getElementById('m-msg');m.className='msg wait';m.textContent='测试中…';
+  const r=await api('/api/test','POST',mPayload());
+  m.className='msg '+(r.ok?'ok':'err');m.textContent=(r.ok?'✓ ':'✗ ')+r.message;
+}
+async function mSave(){
+  if(!mSel){toast('先选一个供应商','err');return;}
+  const r=await api('/api/save','POST',mPayload());
+  if(r.ok){toast('配置已保存','ok');setTimeout(load,800);}
+  else toast('保存失败: '+(r.error||''),'err');
+}
+async function activate(id){
+  const r=await api('/api/activate','POST',{id:id});
+  if(r.ok){toast('已切换','ok');setTimeout(load,600);}
+}
+
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelector('.panel[data-panel="'+t.dataset.tab+'"]').classList.add('active');
+});
+
+async function load(){
+  try{
+    STATE=await api('/api/state');
+    document.getElementById('ab-port').textContent=location.port||'17580';
+    if(STATE.has_config){
+      document.getElementById('sdot').className='dot on';
+      const c=STATE.current||{};
+      document.getElementById('stext').textContent='已配置 · '+(c.name||'')+(c.model?(' · '+c.model):'');
+      renderMain();
+    }else{
+      document.getElementById('sdot').className='dot off';
+      document.getElementById('stext').textContent='未配置 — 请完成下面的引导';
+      renderOnboard();
+    }
+  }catch(e){
+    document.getElementById('sdot').className='dot off';
+    document.getElementById('stext').textContent='无法连接后端';
+  }
+}
+load();
+</script>
+</body>
+</html>

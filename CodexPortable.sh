@@ -18,6 +18,20 @@ if [ "${1:-}" = "--unlock" ]; then
     exit 0
 fi
 
+# 处理 --config 参数
+if [ "${1:-}" = "--config" ]; then
+    CONFIG_SERVER="$SCRIPT_DIR/lib/config_server.py"
+    if command -v python3 &>/dev/null && [ -f "$CONFIG_SERVER" ]; then
+        echo "  打开配置中心 http://127.0.0.1:17590 ..."
+        exec python3 "$CONFIG_SERVER"
+    elif [ -x "$SCRIPT_DIR/bin/linux-x64/cc-switch" ]; then
+        exec "$SCRIPT_DIR/bin/linux-x64/cc-switch"
+    else
+        echo "  [!] 未找到 python3 或 cc-switch"
+        exit 1
+    fi
+fi
+
 echo ""
 echo "  Codex CLI Portable"
 echo ""
@@ -181,13 +195,20 @@ if ! has_valid_config; then
     echo "  首次运行 - 配置 API"
     echo "═══════════════════════════════════════════"
     echo ""
-    if [ -f "$BIN_DIR/cc-switch" ]; then
+    CONFIG_SERVER="$LIB_DIR/config_server.py"
+    if command -v python3 &>/dev/null && [ -f "$CONFIG_SERVER" ]; then
+        echo "  正在打开配置中心 http://127.0.0.1:17590 ..."
+        echo ""
+        python3 "$CONFIG_SERVER" >/dev/null 2>&1 &
+        CC_SWITCH_PID=$!
+        WE_STARTED_CCS=1
+    elif [ -f "$BIN_DIR/cc-switch" ]; then
         echo "  正在打开 CC Switch GUI..."
         "$BIN_DIR/cc-switch" >/dev/null 2>&1 &
         CC_SWITCH_PID=$!
         WE_STARTED_CCS=1
     else
-        echo "  [warn] 未找到 cc-switch GUI，请手动配置 $PORTABLE_CODEX/auth.json"
+        echo "  [warn] 未找到 python3 或 cc-switch GUI，请手动配置 $PORTABLE_CODEX/auth.json"
     fi
     echo "  等待配置..."
     for i in $(seq 1 150); do

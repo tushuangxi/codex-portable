@@ -23,6 +23,22 @@ if [ "${1:-}" = "--unlock" ]; then
     exit 0
 fi
 
+# 处理 --config 参数（随时打开配置中心）
+if [ "${1:-}" = "--config" ]; then
+    CONFIG_SERVER="$SCRIPT_DIR/lib/config_server.py"
+    if command -v python3 &>/dev/null && [ -f "$CONFIG_SERVER" ]; then
+        echo "  打开配置中心 http://127.0.0.1:17590 ..."
+        exec python3 "$CONFIG_SERVER"
+    elif [ -x "$SCRIPT_DIR/bin/macos-arm64/cc-switch" ] || [ -x "$SCRIPT_DIR/bin/macos-x64/cc-switch" ]; then
+        ARCH_CC="$(uname -m)"; CCBIN="$SCRIPT_DIR/bin/macos-x64/cc-switch"
+        [ "$ARCH_CC" = "arm64" ] && CCBIN="$SCRIPT_DIR/bin/macos-arm64/cc-switch"
+        exec "$CCBIN"
+    else
+        echo "  [!] 未找到 python3 或 cc-switch"
+        exit 1
+    fi
+fi
+
 # Banner
 CYAN='\033[38;5;45m'
 BLUE='\033[38;5;33m'
@@ -246,7 +262,15 @@ if ! has_valid_config; then
     echo "  首次运行 - 配置 API"
     echo "═══════════════════════════════════════════"
     echo ""
-    if [ -f "$BIN_DIR/cc-switch" ]; then
+    CONFIG_SERVER="$LIB_DIR/config_server.py"
+    if command -v python3 &>/dev/null && [ -f "$CONFIG_SERVER" ]; then
+        echo "  正在打开配置中心 http://127.0.0.1:17590 ..."
+        echo "  按引导选供应商、填 Key、测试、保存即可。"
+        echo ""
+        python3 "$CONFIG_SERVER" >/dev/null 2>&1 &
+        CC_SWITCH_PID=$!
+        WE_STARTED_CCS=1
+    elif [ -f "$BIN_DIR/cc-switch" ]; then
         echo "  正在打开 CC Switch GUI..."
         echo "  在 Codex 标签页添加供应商并保存（OpenAI 兼容端点）"
         echo ""
@@ -254,7 +278,7 @@ if ! has_valid_config; then
         CC_SWITCH_PID=$!
         WE_STARTED_CCS=1
     else
-        echo "  [warn] 未找到 cc-switch GUI，请手动配置："
+        echo "  [warn] 未找到 python3 或 cc-switch GUI，请手动配置："
         echo "    $PORTABLE_CODEX/auth.json    -> {\"OPENAI_API_KEY\": \"...\"}"
         echo "    $PORTABLE_CODEX/config.toml  -> [model_providers.xxx] ..."
         echo ""

@@ -20,3 +20,5 @@ data/.running
 *.tmp
 *.swp
 dist/
+__pycache__/
+__pycache__/
