@@ -226,6 +226,187 @@ def activate_provider(pid):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Maintenance features (batch 1): export / import / view / logs /
+#  diagnose / unbind
+# ═══════════════════════════════════════════════════════════════
+def export_config():
+    out = {"version": 1, "app_type": APP_TYPE, "exported_at": int(time.time()),
+           "providers": []}
+    if not CCS_DB.exists():
+        return out
+    try:
+        db = _connect()
+        rows = db.execute(
+            "SELECT id, name, settings_config, meta, is_current "
+            "FROM providers WHERE app_type=?", (APP_TYPE,)
+        ).fetchall()
+        db.close()
+        for r in rows:
+            out["providers"].append({
+                "id": r[0], "name": r[1],
+                "settings_config": json.loads(r[2] or "{}"),
+                "meta": json.loads(r[3] or "{}"),
+                "is_current": bool(r[4]),
+            })
+    except Exception:
+        pass
+    return out
+
+
+def import_config(blob):
+    if not isinstance(blob, dict) or not isinstance(blob.get("providers"), list):
+        raise ValueError("无效的配置文件格式")
+    db = _connect()
+    _ensure_schema(db)
+    count = 0
+    current_id = None
+    for p in blob["providers"]:
+        pid = p.get("id") or str(uuid.uuid4())
+        name = p.get("name") or "Imported"
+        settings = p.get("settings_config") or {}
+        meta = p.get("meta") or {}
+        if not settings.get("env"):
+            continue
+        db.execute(
+            "INSERT OR REPLACE INTO providers (id, app_type, name, "
+            "settings_config, created_at, sort_index, meta, is_current) "
+            "VALUES (?,?,?,?,?,?,?,0)",
+            (pid, APP_TYPE, name, json.dumps(settings, ensure_ascii=False),
+             int(time.time() * 1000), 0, json.dumps(meta)),
+        )
+        count += 1
+        if p.get("is_current"):
+            current_id = pid
+    if current_id:
+        db.execute("UPDATE providers SET is_current=0 WHERE app_type=?", (APP_TYPE,))
+        db.execute("UPDATE providers SET is_current=1 WHERE id=? AND app_type=?",
+                   (current_id, APP_TYPE))
+    db.commit()
+    db.close()
+    return count
+
+
+def view_config():
+    cur = read_current()
+    if not cur:
+        return {"configured": False}
+    key = cur.get("api_key", "")
+    masked = (key[:6] + "…" + key[-4:]) if len(key) > 12 else "***"
+    return {
+        "configured": True, "name": cur.get("name"),
+        "base_url": cur.get("base_url"), "model": cur.get("model"),
+        "api_key_masked": masked, "api_key_len": len(key),
+    }
+
+
+def read_logs(max_lines=200):
+    codex_dir = DATA_DIR / ".codex"
+    if not codex_dir.exists():
+        return {"available": False, "text": "暂无日志（data/.codex/ 不存在）"}
+    candidates = []
+    try:
+        for p in codex_dir.rglob("*"):
+            if p.is_file() and p.suffix in (".log", ".jsonl", ".txt"):
+                try:
+                    candidates.append((p.stat().st_mtime, p))
+                except OSError:
+                    continue
+    except Exception:
+        pass
+    if not candidates:
+        return {"available": False, "text": "暂无日志文件"}
+    candidates.sort(reverse=True)
+    newest = candidates[0][1]
+    try:
+        size = newest.stat().st_size
+        with open(newest, "rb") as f:
+            if size > 262144:
+                f.seek(-262144, os.SEEK_END)
+            data = f.read().decode("utf-8", "replace")
+        lines = data.splitlines()[-max_lines:]
+        return {"available": True, "file": newest.name, "text": "\n".join(lines)}
+    except Exception as e:
+        return {"available": False, "text": f"读取日志失败: {e}"}
+
+
+def run_diagnose():
+    checks = []
+
+    def add(label, ok, detail=""):
+        checks.append({"label": label, "ok": bool(ok), "detail": detail})
+
+    cur = read_current()
+    add("配置已就绪", cur is not None,
+        (cur.get("name") if cur else "未配置任何供应商"))
+    if cur:
+        add("Base URL 有效", len(cur.get("base_url", "")) > 8, cur.get("base_url", ""))
+        add("API Key 已填", len(cur.get("api_key", "")) > 5,
+            f"{len(cur.get('api_key', ''))} 字符")
+    plat = _platform_dir()
+    codex_bin = PORTABLE_ROOT / "bin" / plat / ("codex.exe" if os.name == "nt" else "codex")
+    add("Codex 二进制存在", codex_bin.exists(), str(codex_bin))
+    try:
+        test = DATA_DIR / ".write_test"
+        test.write_text("x")
+        test.unlink()
+        add("数据目录可写", True, str(DATA_DIR))
+    except Exception as e:
+        add("数据目录可写", False, str(e))
+    add("Python3 运行时", True, sys.version.split()[0])
+    # Network check
+    net_ok = False
+    net_detail = "无法连接"
+    try:
+        import ssl
+        ctx = None
+        try:
+            import certifi
+            ctx = ssl.create_default_context(cafile=certifi.where())
+        except Exception:
+            pass
+        u = (cur.get("base_url") if cur and cur.get("base_url") else "https://api.openai.com/v1")
+        req = urllib.request.Request(u + "/models", method="HEAD",
+                                     headers={"Authorization": "Bearer test"})
+        kwargs = {"timeout": 5}
+        if ctx:
+            kwargs["context"] = ctx
+        try:
+            urllib.request.urlopen(req, **kwargs)
+            net_ok = True
+            net_detail = u
+        except urllib.error.HTTPError:
+            net_ok = True
+            net_detail = u
+        except Exception:
+            pass
+    except Exception:
+        pass
+    add("网络连通", net_ok, net_detail)
+    return checks
+
+
+def _platform_dir():
+    if os.name == "nt":
+        return "windows-x64"
+    import platform as _p
+    if _p.system() == "Darwin":
+        return "macos-arm64" if _p.machine() == "arm64" else "macos-x64"
+    return "linux-x64"
+
+
+def unbind_device():
+    removed = 0
+    for lf in (DATA_DIR / ".lock", CCS_DIR / ".bind"):
+        try:
+            if lf.exists():
+                lf.unlink()
+                removed += 1
+        except Exception:
+            pass
+    return removed
+
+
+# ═══════════════════════════════════════════════════════════════
 #  API key connectivity test
 # ═══════════════════════════════════════════════════════════════
 def test_key(base_url, api_key, model):
@@ -366,6 +547,21 @@ class Handler(BaseHTTPRequestHandler):
                 })
             elif self.path == "/api/heartbeat":
                 self._json({"alive": True})
+            elif self.path == "/api/export":
+                body = json.dumps(export_config(), ensure_ascii=False, indent=2).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Disposition",
+                                 'attachment; filename="codex-portable-config.json"')
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(body)
+            elif self.path == "/api/view":
+                self._json(view_config())
+            elif self.path == "/api/logs":
+                self._json(read_logs())
+            elif self.path == "/api/diagnose":
+                self._json({"checks": run_diagnose()})
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:
@@ -393,6 +589,12 @@ class Handler(BaseHTTPRequestHandler):
             elif self.path == "/api/activate":
                 activate_provider(data.get("id", ""))
                 self._json({"ok": True})
+            elif self.path == "/api/import":
+                count = import_config(data)
+                self._json({"ok": True, "count": count})
+            elif self.path == "/api/unbind":
+                removed = unbind_device()
+                self._json({"ok": True, "removed": removed})
             else:
                 self._json({"ok": False, "error": "not found"}, 404)
         except Exception as e:

@@ -147,6 +147,7 @@ code{font-family:var(--font-mono);border:1px solid var(--border);padding:1px 6px
     <div class="tabs">
       <div class="tab active" data-tab="model">模型</div>
       <div class="tab" data-tab="saved">供应商</div>
+      <div class="tab" data-tab="ops">运维</div>
       <div class="tab" data-tab="data">数据</div>
       <div class="tab" data-tab="about">关于</div>
     </div>
@@ -171,6 +172,23 @@ code{font-family:var(--font-mono);border:1px solid var(--border);padding:1px 6px
         <h2>已保存的供应商</h2>
         <div class="desc">点击切换当前生效的供应商（与 cc-switch GUI 共用同一份配置库）。</div>
         <div class="saved-list" id="saved-list"></div>
+      </div>
+    </div>
+    <div class="panel" data-panel="ops">
+      <div class="section">
+        <h2>维护命令</h2>
+        <div class="desc">常用运维操作，一键完成。</div>
+        <div class="provider-grid" id="cmd-grid">
+          <div class="pcard" onclick="opsDiagnose()"><div class="pn">诊断</div><div class="pnote">检查环境与连通性</div></div>
+          <div class="pcard" onclick="opsViewConfig()"><div class="pn">查看配置</div><div class="pnote">当前生效的配置（脱敏）</div></div>
+          <div class="pcard" onclick="opsExport()"><div class="pn">导出配置</div><div class="pnote">下载为 JSON（含密钥）</div></div>
+          <div class="pcard" onclick="opsImport()"><div class="pn">导入配置</div><div class="pnote">从 JSON 文件还原</div></div>
+          <div class="pcard" onclick="opsLogs()"><div class="pn">查看日志</div><div class="pnote">最近 200 行</div></div>
+          <div class="pcard" onclick="opsUnbind()"><div class="pn">解绑设备</div><div class="pnote">允许换设备运行</div></div>
+        </div>
+        <input type="file" id="import-file" accept="application/json" style="display:none">
+        <div class="msg" id="ops-msg"></div>
+        <pre id="ops-out" style="display:none;margin-top:14px;padding:12px;border:1px solid var(--border);font-family:var(--font-mono);font-size:11px;white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;line-height:1.6"></pre>
       </div>
     </div>
     <div class="panel" data-panel="data">
@@ -213,6 +231,15 @@ function mPayload(){const p=STATE.providers_catalog.find(x=>x.id===mSel);const i
 async function mTest(){if(!mSel){toast('先选一个供应商','err');return}const m=document.getElementById('m-msg');m.className='msg wait';m.textContent='测试中…';const r=await api('/api/test','POST',mPayload());m.className='msg '+(r.ok?'ok':'err');m.textContent=(r.ok?'OK ':'ERR ')+r.message}
 async function mSave(){if(!mSel){toast('先选一个供应商','err');return}const r=await api('/api/save','POST',mPayload());if(r.ok){toast('已保存','ok');setTimeout(load,800)}else toast('失败: '+(r.error||''),'err')}
 async function activate(id){const r=await api('/api/activate','POST',{id});if(r.ok){toast('已切换','ok');setTimeout(load,600)}}
+function opsMsg(t,kind){const m=document.getElementById('ops-msg');m.className='msg '+(kind||'wait');m.textContent=t}
+function opsOut(t){const o=document.getElementById('ops-out');o.style.display='block';o.textContent=t}
+async function opsDiagnose(){opsMsg('诊断中…');document.getElementById('ops-out').style.display='none';const r=await api('/api/diagnose');const lines=(r.checks||[]).map(c=>(c.ok?'[OK] ':'[!!] ')+c.label+(c.detail?'  — '+c.detail:''));opsMsg('诊断完成','ok');opsOut(lines.join('\n'))}
+async function opsViewConfig(){opsMsg('读取中…');const r=await api('/api/view');document.getElementById('ops-out').style.display='none';if(!r.configured){opsMsg('当前未配置','err');return}opsMsg('当前配置','ok');opsOut('供应商: '+(r.name||'')+'\nBase URL: '+(r.base_url||'')+'\n模型: '+(r.model||'(默认)')+'\nAPI Key: '+(r.api_key_masked||'')+'  ('+(r.api_key_len||0)+' 字符)')}
+function opsExport(){opsMsg('已触发下载（文件含明文密钥，请妥善保管）','ok');window.location='/api/export'}
+function opsImport(){document.getElementById('import-file').click()}
+document.getElementById('import-file').addEventListener('change',function(e){const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=async()=>{try{const blob=JSON.parse(rd.result);const r=await api('/api/import','POST',blob);if(r.ok){toast('已导入 '+r.count+' 个供应商','ok');opsMsg('导入成功：'+r.count+' 个供应商','ok');setTimeout(load,900)}else{opsMsg('导入失败: '+(r.error||''),'err')}}catch(err){opsMsg('文件解析失败: '+err,'err')}};rd.readAsText(f);e.target.value=''});
+async function opsLogs(){opsMsg('读取日志…');const r=await api('/api/logs');if(!r.available){opsMsg(r.text||'无日志','err');document.getElementById('ops-out').style.display='none';return}opsMsg('日志: '+(r.file||''),'ok');opsOut(r.text||'(空)')}
+async function opsUnbind(){if(!confirm('确定解绑当前设备？解绑后此便携包可在其他设备/位置运行。'))return;const r=await api('/api/unbind','POST',{});if(r.ok){toast('已解绑 '+r.removed+' 个锁','ok');opsMsg('已移除 '+r.removed+' 个绑定锁，下次运行将重新绑定到当前位置。','ok')}}
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));t.classList.add('active');document.querySelector('.panel[data-panel="'+t.dataset.tab+'"]').classList.add('active')});
 async function load(){try{STATE=await api('/api/state');document.getElementById('ab-port').textContent=location.port||'17590';if(STATE.has_config){document.getElementById('sdot').className='dot on';const c=STATE.current||{};document.getElementById('stext').textContent='已配置 · '+(c.name||'')+(c.model?' · '+c.model:'');renderMain()}else{document.getElementById('sdot').className='dot off';document.getElementById('stext').textContent='未配置 — 请完成引导';renderOnboard()}}catch(e){document.getElementById('sdot').className='dot off';document.getElementById('stext').textContent='无法连接后端'}}
 load();
