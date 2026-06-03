@@ -523,7 +523,32 @@ def test_key(base_url, api_key, model):
         contexts.append(ssl.create_default_context(cafile=certifi.where()))
     except Exception:
         pass
-    contexts.append(None)
+    # macOS Homebrew/system Python often lacks root certs in the OpenSSL
+    # bundle.  Try loading from the macOS System keychain via Security
+    # framework, then fall back to an unverified context as last resort.
+    try:
+        import platform
+        if platform.system() == "Darwin":
+            import subprocess, tempfile
+            pem = subprocess.check_output(
+                ["security", "find-certificate", "-a", "-p",
+                 "/System/Library/Keychains/SystemRootCertificates.keychain"],
+                timeout=5, stderr=subprocess.DEVNULL)
+            with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as f:
+                f.write(pem)
+                mac_ca = f.name
+            ctx = ssl.create_default_context(cafile=mac_ca)
+            contexts.append(ctx)
+            os.unlink(mac_ca)
+    except Exception:
+        pass
+    try:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        contexts.append(ctx)
+    except Exception:
+        pass
 
     last_err = "无法连接"
     for ctx in contexts:
