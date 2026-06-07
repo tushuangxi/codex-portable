@@ -148,6 +148,15 @@ jobs:
           mkdir -p dist/CodexPortable-windows-x64/bin/windows-x64
           cp bin/windows-x64/codex.exe bin/windows-x64/cc-switch.exe dist/CodexPortable-windows-x64/bin/windows-x64/
 
+          # All-platforms package (all 4 platform binaries in one zip)
+          mkdir -p dist/CodexPortable-all-platforms/bin/{macos-arm64,macos-x64,linux-x64,windows-x64}
+          rsync -a --exclude='bin' --exclude='dist' --exclude='.git*' . dist/CodexPortable-all-platforms/
+          for plat in macos-arm64 macos-x64 linux-x64; do
+            cp bin/$plat/codex bin/$plat/cc-switch dist/CodexPortable-all-platforms/bin/$plat/
+            chmod +x dist/CodexPortable-all-platforms/bin/$plat/codex dist/CodexPortable-all-platforms/bin/$plat/cc-switch
+          done
+          cp bin/windows-x64/codex.exe bin/windows-x64/cc-switch.exe dist/CodexPortable-all-platforms/bin/windows-x64/
+
           # Zip them
           cd dist
           for d in CodexPortable-*; do
@@ -171,10 +180,18 @@ jobs:
             - Codex version: ${{ steps.codex_ver.outputs.tag }}
             - Build version: ${{ steps.ver.outputs.version }}
 
-            **Bundled:** Codex CLI binary + cc-switch GUI for the matching platform.
+            **Bundled:** Codex CLI binary + cc-switch GUI.
 
-            Download the zip for your platform, extract anywhere (USB drive recommended),
-            and double-click the launcher:
+            | Package | Platform |
+            |---------|----------|
+            | `CodexPortable-macos-arm64` | Apple Silicon Mac |
+            | `CodexPortable-macos-x64` | Intel Mac |
+            | `CodexPortable-linux-x64` | Linux x86_64 |
+            | `CodexPortable-windows-x64` | Windows x86_64 |
+            | `CodexPortable-all-platforms` | All of the above |
+
+            Download the zip for your platform (or `all-platforms` for USB distribution),
+            extract anywhere, and double-click the launcher:
 
             - macOS:   `CodexPortable.command`
             - Linux:   `./CodexPortable.sh`
