@@ -874,9 +874,25 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def parse_request(self):
+        """Override to check raw request line BEFORE path normalization."""
+        raw = getattr(self, 'raw_requestline', b'')
+        if isinstance(raw, bytes):
+            raw = raw.decode('utf-8', 'replace')
+        if '..' in raw or '\\' in raw or '\x00' in raw:
+            # Must set requestline before send_response (log_request needs it)
+            self.requestline = raw.strip()
+            self.request_version = 'HTTP/1.1'
+            self.send_response(400)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            self.wfile.write(b'{"error":"invalid path"}')
+            return False
+        return super().parse_request()
+
     def _path_safe(self):
-        """Reject path traversal attempts."""
-        p = self.path.split("?")[0]  # strip query
+        """Defense-in-depth: also check normalized path."""
+        p = self.path.split("?")[0]
         if ".." in p or "\\" in p or "\0" in p:
             self._json({"error": "invalid path"}, 400)
             return False
