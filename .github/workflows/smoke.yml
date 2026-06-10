@@ -101,15 +101,7 @@ jobs:
           echo "  [ok] host mismatch rejected"
 
           # Test path traversal rejection (use raw socket — curl normalizes ..)
-          STATUS=$(python3 -c "
-import socket
-s = socket.socket()
-s.connect(('127.0.0.1', 17590))
-s.sendall(b'GET /../../../etc/passwd HTTP/1.1\r\nHost: 127.0.0.1:17590\r\n\r\n')
-line = s.recv(4096).decode().split('\r\n')[0]
-print(line.split()[1])
-s.close()
-" 2>/dev/null)
+          STATUS=$(printf 'GET /../../../etc/passwd HTTP/1.1\r\nHost: 127.0.0.1:17590\r\n\r\n' | nc -w 2 127.0.0.1 17590 | head -1 | awk '{print $2}')
           if [ "$STATUS" != "400" ]; then
             echo "  [FAIL] path traversal should return 400, got $STATUS"
             kill $SERVER_PID 2>/dev/null
