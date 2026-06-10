@@ -80,6 +80,29 @@ preflight_check() {
         warnings=$((warnings + 1))
     fi
 
+    # 6. Binary actually runs (--version smoke test)
+    if [ -f "$bin_file" ] && [ -x "$bin_file" ]; then
+        local BIN_VER
+        BIN_VER=$("$bin_file" --version 2>&1 || true)
+        if [ -z "$BIN_VER" ]; then
+            echo "  [WARN]  Binary found but won't run: $bin_file"
+            echo "          USB files may be corrupted"
+            warnings=$((warnings + 1))
+        fi
+    fi
+
+    # 7. Config file integrity
+    local AUTH_FILE="$data_dir/.codex/auth.json"
+    if [ -f "$AUTH_FILE" ]; then
+        if command -v python3 &>/dev/null; then
+            if ! python3 -c "import json; json.load(open('$AUTH_FILE'))" 2>/dev/null; then
+                echo "  [WARN]  auth.json parse failed: $AUTH_FILE"
+                echo "          Config center will auto-recover from backups"
+                warnings=$((warnings + 1))
+            fi
+        fi
+    fi
+
     # Summary
     if [ "$errors" -gt 0 ]; then
         echo "  [FAIL] $errors error(s), $warnings warning(s)"

@@ -234,7 +234,8 @@ if ! has_valid_config; then
     if PY3=$(resolve_python3) && [ -f "$CONFIG_SERVER" ]; then
         echo "  正在打开配置中心 http://127.0.0.1:17590 ..."
         echo ""
-        "$PY3" "$CONFIG_SERVER" >/dev/null 2>&1 &
+        mkdir -p "$SCRIPT_DIR/data/logs" 2>/dev/null
+        "$PY3" "$CONFIG_SERVER" > "$SCRIPT_DIR/data/logs/config-server.log" 2>&1 &
         CC_SWITCH_PID=$!
         WE_STARTED_CCS=1
     else

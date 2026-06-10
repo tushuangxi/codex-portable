@@ -118,9 +118,6 @@ jobs:
           curl -fsSL -o /tmp/get-pip.py https://bootstrap.pypa.io/get-pip.py
           bin/windows-x64/python/python.exe /tmp/get-pip.py --no-warn-script-location 2>/dev/null || true
 
-          # Install minimal deps for config_server.py (flask, requests)
-          bin/windows-x64/python/python.exe -m pip install flask requests --no-warn-script-location 2>/dev/null || true
-
           ls -lh bin/windows-x64/python/python.exe
 
       - name: Download Python standalone (macOS + Linux)

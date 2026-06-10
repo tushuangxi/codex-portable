@@ -54,9 +54,9 @@ do_show_config() {
         return
     fi
     if command -v python3 &>/dev/null; then
-        python3 -c "
-import sqlite3, json
-db = sqlite3.connect('$db')
+        DB_PATH="$db" python3 -c "
+import sqlite3, json, os
+db = sqlite3.connect(os.environ['DB_PATH'])
 row = db.execute('SELECT settings_config FROM providers WHERE is_current=1 LIMIT 1').fetchone()
 db.close()
 if row:
@@ -186,13 +186,32 @@ do_system_info() {
 
 do_kill_residual() {
     local app_name="${1:-codex}"
-    echo "  清理残留进程..."
-    if command -v pkill &>/dev/null; then
-        pkill -f "$app_name" 2>/dev/null
-        pkill -f "cc-switch" 2>/dev/null
-        pkill -f "config_server.py" 2>/dev/null
+    echo "  扫描残留进程..."
+    local FOUND=0
+
+    for pattern in "config_server.py" "cc-switch"; do
+        local PIDS=$(pgrep -f "$pattern" 2>/dev/null || true)
+        if [ -n "$PIDS" ]; then
+            for PID in $PIDS; do
+                local CMD=$(ps -p "$PID" -o args= 2>/dev/null || echo "")
+                echo "  PID $PID: $CMD"
+                FOUND=1
+            done
+        fi
+    done
+
+    if [ "$FOUND" = "0" ]; then
+        echo "  [ok] 没有残留进程"
+        return
     fi
-    echo "  [ok] 已清理"
+
+    read -p "  确认终止以上进程? (y/N): " CONFIRM
+    if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
+        for pattern in "config_server.py" "cc-switch"; do
+            pgrep -f "$pattern" 2>/dev/null | xargs kill 2>/dev/null
+        done
+        echo "  [ok] 已清理"
+    fi
 }
 
 do_factory_reset() {
@@ -214,6 +233,51 @@ do_factory_reset() {
     fi
 }
 
+do_logs() {
+    local data_dir="$1"
+    local log_dir="$data_dir/logs"
+    mkdir -p "$log_dir" 2>/dev/null
+    echo ""
+    echo "  [a] 查看最近日志（最后 50 行）"
+    echo "  [b] 导出日志到桌面"
+    echo "  [c] 清理 7 天前的日志"
+    echo ""
+    read -p "  选择 (a-c): " -n 1 LOG_CHOICE
+    echo ""
+    case $LOG_CHOICE in
+        a)
+            local latest=$(ls -t "$log_dir"/*.log 2>/dev/null | head -1)
+            if [ -n "$latest" ]; then echo "  -- $latest --"; tail -50 "$latest"
+            else echo "  [!] 未找到日志文件"; fi ;;
+        b)
+            local ts=$(date +%Y%m%d_%H%M%S)
+            local export_file="$HOME/Desktop/codex-portable-logs-$ts.txt"
+            if ls "$log_dir"/*.log >/dev/null 2>&1; then
+                cat "$log_dir"/*.log > "$export_file"; echo "  [ok] 日志已导出: $export_file"
+            else echo "  [!] 没有日志可导出"; fi ;;
+        c)
+            local count=$(find "$log_dir" -name "*.log" -mtime +7 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$count" = "0" ]; then echo "  [ok] 没有需要清理的旧日志"; return; fi
+            echo "  找到 $count 个超过 7 天的日志"
+            read -p "  确认清理? (y/N): " C
+            if [ "$C" = "y" ] || [ "$C" = "Y" ]; then
+                find "$log_dir" -name "*.log" -mtime +7 -delete 2>/dev/null
+                echo "  [ok] 已清理"
+            fi ;;
+    esac
+}
+
+do_unbind() {
+    local data_dir="$1"
+    local lock1="$data_dir/.lock"
+    local lock2="$data_dir/.cc-switch/.bind"
+    local removed=0
+    [ -f "$lock1" ] && { rm -f "$lock1"; removed=$((removed+1)); }
+    [ -f "$lock2" ] && { rm -f "$lock2"; removed=$((removed+1)); }
+    if [ "$removed" -gt 0 ]; then echo "  [ok] 已移除 $removed 个绑定锁"
+    else echo "  [info] 没有找到绑定锁"; fi
+}
+
 run_menu() {
     local lib_dir="$1"
     local bin_dir="$2"
@@ -229,8 +293,8 @@ run_menu() {
             2) do_show_config "$data_dir" ;;
             3) do_export_config "$data_dir" ;;
             4) do_diagnose "$bin_dir" "$data_dir" "$lib_dir" "$app_name" ;;
-            5) echo "  日志功能开发中..." ;;
-            6) echo "  解除绑定: 删除 $data_dir/.lock 和 .bind 文件" ;;
+            5) do_logs "$data_dir" ;;
+            6) do_unbind "$data_dir" ;;
             7) do_system_info "$bin_dir" "$data_dir" "$app_name" ;;
             8) do_kill_residual "$app_name" ;;
             9) do_factory_reset "$data_dir" ;;

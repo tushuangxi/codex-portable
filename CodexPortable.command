@@ -294,7 +294,8 @@ if ! has_valid_config; then
         echo "  按引导选供应商、填 Key、测试、保存即可。"
         echo "  （CC Switch GUI 也可在配置中心界面内启动）"
         echo ""
-        "$PY3" "$CONFIG_SERVER" >/dev/null 2>&1 &
+        mkdir -p "$SCRIPT_DIR/data/logs" 2>/dev/null
+        "$PY3" "$CONFIG_SERVER" > "$SCRIPT_DIR/data/logs/config-server.log" 2>&1 &
         CC_SWITCH_PID=$!
         WE_STARTED_CCS=1
     else

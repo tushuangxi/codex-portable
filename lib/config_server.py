@@ -375,6 +375,7 @@ def _atomic_write(path, content):
     from pathlib import Path
     import shutil
     p = Path(path)
+    was_first_write = not p.exists()
 
     # Rolling backup: copy current file before overwriting
     if p.exists() and p.stat().st_size > 0:
@@ -397,7 +398,11 @@ def _atomic_write(path, content):
     fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
     try:
         os.write(fd, content.encode("utf-8"))
-        os.fsync(fd)
+        try:
+            os.fsync(fd)
+        except OSError as e:
+            import sys
+            print(f"[config] fsync failed (eject safely): {e}", file=sys.stderr)
     finally:
         os.close(fd)
     try:
@@ -408,6 +413,17 @@ def _atomic_write(path, content):
         except Exception:
             pass
         raise
+
+    # Seed backup on first write so USB yank recovery has a baseline
+    if was_first_write:
+        try:
+            BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+            from datetime import datetime
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup = BACKUP_DIR / f"{p.name}.{ts}"
+            shutil.copy2(str(p), str(backup))
+        except Exception:
+            pass
 
 
 def _safe_read(path):
@@ -904,6 +920,11 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._csrf_ok():
             self._json({"ok": False, "error": "missing or invalid token"}, 403)
+            return
+        # Layer 3: require JSON Content-Type on writes (defense-in-depth)
+        ct = (self.headers.get("Content-Type", "")).split(";")[0].strip().lower()
+        if ct and ct != "application/json":
+            self._json({"ok": False, "error": "Unsupported Media Type"}, 415)
             return
         try:
             n = min(int(self.headers.get("Content-Length", 0)), 65_536)

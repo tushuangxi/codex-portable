@@ -15,7 +15,7 @@ jobs:
 
       - name: Shell syntax (bash -n)
         run: |
-          for f in CodexPortable.sh CodexPortable.command; do
+          for f in CodexPortable.sh CodexPortable.command lib/preflight.sh lib/maintain.sh; do
             echo "  checking $f ..."
             bash -n "$f"
           done
