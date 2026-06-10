@@ -49,12 +49,8 @@ if [ "${1:-}" = "--config" ]; then
     if PY3=$(resolve_python3) && [ -f "$CONFIG_SERVER" ]; then
         echo "  打开配置中心 http://127.0.0.1:17590 ..."
         exec "$PY3" "$CONFIG_SERVER"
-    elif [ -x "$SCRIPT_DIR/bin/macos-arm64/cc-switch" ] || [ -x "$SCRIPT_DIR/bin/macos-x64/cc-switch" ]; then
-        ARCH_CC="$(uname -m)"; CCBIN="$SCRIPT_DIR/bin/macos-x64/cc-switch"
-        [ "$ARCH_CC" = "arm64" ] && CCBIN="$SCRIPT_DIR/bin/macos-arm64/cc-switch"
-        exec "$CCBIN"
     else
-        echo "  [!] 未找到 python3 或 cc-switch"
+        echo "  [!] 未找到 python3 或 config_server.py"
         exit 1
     fi
 fi

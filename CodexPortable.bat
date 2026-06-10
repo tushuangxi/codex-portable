@@ -173,9 +173,11 @@ if "!HAS_CONFIG!"=="1" (
   echo   Starting config center in background for key changes...
   echo(
   REM Start config center in background (non-blocking)
-  if defined PYTHON_CMD if exist "%CONFIG_SERVER%" (
-    start "" "!PYTHON_CMD!" "%CONFIG_SERVER%"
-    set "WE_STARTED_CCS=1"
+  if defined PYTHON_CMD (
+    if exist "%CONFIG_SERVER%" (
+      start "" cmd /c "!PYTHON_CMD!" "%CONFIG_SERVER%"
+      set "WE_STARTED_CCS=1"
+    )
   )
   goto :launch_codex
 )
@@ -186,13 +188,18 @@ echo =====================================
 echo   First Run - Configure API
 echo =====================================
 echo(
-if defined PYTHON_CMD if exist "%CONFIG_SERVER%" (
-  echo   Opening config center http://127.0.0.1:17590 ...
-  echo   Follow the guide to select provider, fill key, test, and save.
-  echo   (CC Switch GUI is also available via the config center UI)
-  echo(
-  start "" "!PYTHON_CMD!" "%CONFIG_SERVER%"
-  set "WE_STARTED_CCS=1"
+if defined PYTHON_CMD (
+  if exist "%CONFIG_SERVER%" (
+    echo   Opening config center http://127.0.0.1:17590 ...
+    echo   Follow the guide to select provider, fill key, test, and save.
+    echo   (CC Switch GUI is also available via the config center UI)
+    echo(
+    start "" cmd /c "!PYTHON_CMD!" "%CONFIG_SERVER%"
+    set "WE_STARTED_CCS=1"
+  ) else (
+    echo   [!] Config server script not found: %CONFIG_SERVER%
+    goto :error_cleanup
+  )
 ) else (
   echo   [!] No Python found. Config center cannot start.
   echo   Please install Python or use another machine to configure.
