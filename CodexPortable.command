@@ -296,21 +296,14 @@ if ! has_valid_config; then
     if PY3=$(resolve_python3) && [ -f "$CONFIG_SERVER" ]; then
         echo "  正在打开配置中心 http://127.0.0.1:17590 ..."
         echo "  按引导选供应商、填 Key、测试、保存即可。"
+        echo "  （CC Switch GUI 也可在配置中心界面内启动）"
         echo ""
         "$PY3" "$CONFIG_SERVER" >/dev/null 2>&1 &
         CC_SWITCH_PID=$!
         WE_STARTED_CCS=1
-    elif [ -f "$BIN_DIR/cc-switch" ]; then
-        echo "  正在打开 CC Switch GUI..."
-        echo "  在 Codex 标签页添加供应商并保存（OpenAI 兼容端点）"
-        echo ""
-        "$BIN_DIR/cc-switch" >/dev/null 2>&1 &
-        CC_SWITCH_PID=$!
-        WE_STARTED_CCS=1
     else
-        echo "  [warn] 未找到 python3 或 cc-switch GUI，请手动配置："
-        echo "    $PORTABLE_CODEX/auth.json    -> {\"OPENAI_API_KEY\": \"...\"}"
-        echo "    $PORTABLE_CODEX/config.toml  -> [model_providers.xxx] ..."
+        echo "  [!] 未找到 python3，配置中心无法启动。"
+        echo "  请安装 python3 后重试。"
         echo ""
     fi
 

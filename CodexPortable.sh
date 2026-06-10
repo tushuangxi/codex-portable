@@ -239,13 +239,9 @@ if ! has_valid_config; then
         "$PY3" "$CONFIG_SERVER" >/dev/null 2>&1 &
         CC_SWITCH_PID=$!
         WE_STARTED_CCS=1
-    elif [ -f "$BIN_DIR/cc-switch" ]; then
-        echo "  正在打开 CC Switch GUI..."
-        "$BIN_DIR/cc-switch" >/dev/null 2>&1 &
-        CC_SWITCH_PID=$!
-        WE_STARTED_CCS=1
     else
-        echo "  [warn] 未找到 python3 或 cc-switch GUI，请手动配置 $PORTABLE_CODEX/auth.json"
+        echo "  [!] 未找到 python3，配置中心无法启动。"
+        echo "  请安装 python3 后重试。"
     fi
     echo "  等待配置..."
     for i in $(seq 1 150); do
