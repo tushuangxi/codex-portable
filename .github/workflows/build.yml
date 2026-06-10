@@ -131,9 +131,11 @@ jobs:
 
           resolve_asset() {
             local pattern="$1"
-            # Use gh CLI to find the asset by glob pattern
+            # Use GitHub API (unauthenticated) to find asset by glob pattern
             local name
-            name=$(gh release view "$PBS_TAG" --repo astral-sh/python-build-standalone               --json assets --jq ".assets[].name" 2>/dev/null | grep "$pattern" | head -1)
+            name=$(curl -sL "https://api.github.com/repos/astral-sh/python-build-standalone/releases/tags/${PBS_TAG}" \
+              | python3 -c "import sys,json; [print(a['name']) for a in json.load(sys.stdin).get('assets',[])]" \
+              | grep "$pattern" | head -1)
             if [ -z "$name" ]; then
               echo "  [!] Asset not found: $pattern" >&2
               return 1
