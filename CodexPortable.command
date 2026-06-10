@@ -327,6 +327,17 @@ if ! has_valid_config; then
         echo "  [!] 等待超时，请重新运行"
         exit 1
     fi
+else
+    # 已有配置，仍然启动配置中心（后台非阻塞），方便随时修改 Key
+    CONFIG_SERVER="$LIB_DIR/config_server.py"
+    if PY3=$(resolve_python3) && [ -f "$CONFIG_SERVER" ]; then
+        echo "  配置中心已启动: http://127.0.0.1:17590"
+        echo "  （如需修改 Key，在浏览器中操作后保存即可）"
+        mkdir -p "$SCRIPT_DIR/data/logs" 2>/dev/null
+        "$PY3" "$CONFIG_SERVER" > "$SCRIPT_DIR/data/logs/config-server.log" 2>&1 &
+        CC_SWITCH_PID=$!
+        WE_STARTED_CCS=1
+    fi
 fi
 
 # ═══════════════════════════════════════════
