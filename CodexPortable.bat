@@ -156,12 +156,22 @@ set "CONFIG_PID="
 
 REM Find Python: system > bundled
 set "PYTHON_CMD="
-where python3 >nul 2>&1 && ( python3 --version >nul 2>&1 && set "PYTHON_CMD=python3" )
-if not defined PYTHON_CMD ( where python >nul 2>&1 && ( python --version >nul 2>&1 && set "PYTHON_CMD=python" ) )
-if not defined PYTHON_CMD (
-  set "_BUNDLED=!BIN_DIR!\python\python.exe"
-  if exist "!_BUNDLED!" set "PYTHON_CMD=!_BUNDLED!"
+where python3 >nul 2>&1
+if !errorlevel! equ 0 (
+  python3 --version >nul 2>&1
+  if !errorlevel! equ 0 set "PYTHON_CMD=python3"
 )
+if not defined PYTHON_CMD (
+  where python >nul 2>&1
+  if !errorlevel! equ 0 (
+    python --version >nul 2>&1
+    if !errorlevel! equ 0 set "PYTHON_CMD=python"
+  )
+)
+if not defined PYTHON_CMD (
+  if exist "!BIN_DIR!\python\python.exe" set "PYTHON_CMD=!BIN_DIR!\python\python.exe"
+)
+echo   [debug] PYTHON_CMD=!PYTHON_CMD!
 
 :: Check config first
 call :check_config
