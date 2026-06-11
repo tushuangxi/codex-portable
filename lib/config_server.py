@@ -17,7 +17,6 @@ import secrets
 import os
 import sqlite3
 import sys
-import threading
 import time
 import uuid
 import urllib.request
@@ -250,13 +249,12 @@ def read_current():
     """Return the currently-active codex provider as a dict, or None."""
     if not CCS_DB.exists():
         return None
+    db = _connect()
     try:
-        db = _connect()
         row = db.execute(
             "SELECT id, name, settings_config FROM providers "
             "WHERE app_type=? AND is_current=1 LIMIT 1", (APP_TYPE,)
         ).fetchone()
-        db.close()
         if not row:
             return None
         cfg = json.loads(row[2])
@@ -269,6 +267,8 @@ def read_current():
         }
     except Exception:
         return None
+    finally:
+        db.close()
 
 
 def list_providers():
@@ -709,6 +709,21 @@ def launch_ccswitch():
     full native GUI with extra features. Users who prefer it can start it
     from here. Returns (ok, message). Never blocks; uses list-form args
     (no shell=True)."""
+    # Check if already running (#30: prevent duplicate spawns)
+    import subprocess as _sp
+    try:
+        if os.name == "nt":
+            chk = _sp.run(["tasklist", "/fi", "ImageName eq cc-switch.exe"],
+                          capture_output=True, text=True, timeout=5)
+            if "cc-switch.exe" in chk.stdout:
+                return True, "CC Switch 已在运行"
+        else:
+            chk = _sp.run(["pgrep", "-f", "cc-switch"],
+                          capture_output=True, text=True, timeout=5)
+            if chk.returncode == 0:
+                return True, "CC Switch 已在运行"
+    except Exception:
+        pass
     plat = _platform_dir()
     exe = "cc-switch.exe" if os.name == "nt" else "cc-switch"
     ccbin = PORTABLE_ROOT / "bin" / plat / exe
@@ -1004,7 +1019,7 @@ class Handler(BaseHTTPRequestHandler):
                                    "172.20.", "172.21.", "172.22.", "172.23.",
                                    "172.24.", "172.25.", "172.26.", "172.27.",
                                    "172.28.", "172.29.", "172.30.", "172.31.",
-                                   "192.168.", "100.64.", "::ffff:", "::1")
+                                   "192.168.", "100.64.", "::ffff:", "::1", "fe80:")
                     try:
                         for fam, _, _, _, addr in socket.getaddrinfo(_parsed.hostname, None):
                             rip = addr[0]

@@ -349,6 +349,7 @@ function renderGrid(gridId,providers,selId,onSelect){
     d.onclick=()=>onSelect(p.id);
     g.appendChild(d);
   });
+  if(!providers.length){g.innerHTML='<div style="padding:20px;text-align:center;color:var(--fg-muted);font-family:var(--font-mono);font-size:12px">没有匹配的供应商</div>'}
 }
 
 /* ── Model select helper ── */
@@ -513,7 +514,7 @@ async function opsDiagnose(){opsMsg('诊断中…');document.getElementById('ops
 async function opsViewConfig(){opsMsg('读取中…');const r=await api('/api/view');document.getElementById('ops-out').style.display='none';if(!r.configured){opsMsg('当前未配置','err');return}opsMsg('当前配置','ok');opsOut('供应商: '+(r.name||'')+'\nBase URL: '+(r.base_url||'')+'\n模型: '+(r.model||'(默认)')+'\nAPI Key: '+(r.api_key_masked||'')+'  ('+(r.api_key_len||0)+' 字符)')}
 function opsExport(){opsMsg('正在导出…','wait');api('/api/export','POST',{}).then(d=>{if(d&&d.error){opsMsg('导出失败: '+d.error,'err');return}const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='codex-portable-config.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000);opsMsg('已导出（文件含明文密钥，请妥善保管）','ok')}).catch(e=>opsMsg('导出失败: '+e,'err'))}
 function opsImport(){document.getElementById('import-file').click()}
-document.getElementById('import-file').addEventListener('change',function(e){const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=async()=>{try{const blob=JSON.parse(rd.result);const r=await api('/api/import','POST',blob);if(r.ok){toast('已导入 '+r.count+' 个供应商','ok');opsMsg('导入成功：'+r.count+' 个供应商','ok');setTimeout(load,900)}else{opsMsg('导入失败: '+(r.error||''),'err')}}catch(err){opsMsg('文件解析失败: '+err,'err')}};rd.readAsText(f);e.target.value=''});
+document.getElementById('import-file').addEventListener('change',function(e){const f=e.target.files[0];if(!f)return;if(f.size>1048576){opsMsg('文件过大 (>1MB)','err');return}const rd=new FileReader();rd.onload=async()=>{try{const blob=JSON.parse(rd.result);const r=await api('/api/import','POST',blob);if(r.ok){toast('已导入 '+r.count+' 个供应商','ok');opsMsg('导入成功：'+r.count+' 个供应商','ok');setTimeout(load,900)}else{opsMsg('导入失败: '+(r.error||''),'err')}}catch(err){opsMsg('文件解析失败: '+err,'err')}};rd.readAsText(f);e.target.value=''});
 async function opsLogs(){opsMsg('读取日志…');const r=await api('/api/logs');if(!r.available){opsMsg(r.text||'无日志','err');document.getElementById('ops-out').style.display='none';return}opsMsg('日志: '+(r.file||''),'ok');opsOut(r.text||'(空)')}
 async function opsUnbind(){if(!confirm('确定解绑当前设备？解绑后此便携包可在其他设备/位置运行。'))return;const r=await api('/api/unbind','POST',{});if(r.ok){toast('已解绑 '+r.removed+' 个锁','ok');opsMsg('已移除 '+r.removed+' 个绑定锁，下次运行将重新绑定到当前位置。','ok')}}
 
@@ -525,6 +526,8 @@ async function opsReset(){
   if(r.ok){
     rm.className='msg ok';rm.textContent='已重置，清除了 '+r.removed+' 个供应商。正在返回引导页…';
     toast('配置已重置','ok');
+    // Update CSRF token from server response, then reload
+    if(r.new_token){const m=document.querySelector('meta[name="cc-token"]');if(m)m.content=r.new_token}
     setTimeout(load,1200);
   }else{
     rm.className='msg err';rm.textContent='重置失败: '+(r.error||'未知错误');
