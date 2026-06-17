@@ -121,19 +121,29 @@ if !errorlevel! EQU 0 (
 if not exist "%PORTABLE_CCS%" mkdir "%PORTABLE_CCS%"
 if not exist "%PORTABLE_CODEX%" mkdir "%PORTABLE_CODEX%"
 
-:: Create junctions
-call :ensure_link "%SYS_CCS%" "%PORTABLE_CCS%"
-if !errorlevel! NEQ 0 (
-  echo   [ERROR] Cannot create link for .cc-switch
-  echo   Try enabling Developer Mode in Windows Settings.
-  pause
-  exit /b 1
+:: Check if filesystem supports symlinks (NTFS vs FAT32/exFAT)
+set "USE_LINKS=1"
+for %%D in ("%SCRIPT_DIR%") do set "DRIVE=%%~dD"
+if defined DRIVE (
+  fsutil fsinfo volumeinfo "!DRIVE!" 2>nul | find /i "FAT" >nul && set "USE_LINKS=0"
 )
-call :ensure_link "%SYS_CODEX%" "%PORTABLE_CODEX%"
-if !errorlevel! NEQ 0 (
-  echo   [ERROR] Cannot create link for .codex
-  pause
-  exit /b 1
+
+:: Create junctions (skip on FAT32/exFAT)
+if "!USE_LINKS!"=="0" (
+  echo   [INFO] FAT32 detected, using portable dir directly
+  set "SYS_CCS=%PORTABLE_CCS%"
+  set "SYS_CODEX=%PORTABLE_CODEX%"
+) else (
+  call :ensure_link "%SYS_CCS%" "%PORTABLE_CCS%"
+  if !errorlevel! NEQ 0 (
+    echo   [WARN] Symlink failed, using portable dir directly
+    set "SYS_CCS=%PORTABLE_CCS%"
+  )
+  call :ensure_link "%SYS_CODEX%" "%PORTABLE_CODEX%"
+  if !errorlevel! NEQ 0 (
+    echo   [WARN] Symlink failed, using portable dir directly
+    set "SYS_CODEX=%PORTABLE_CODEX%"
+  )
 )
 
 :: Write run-lock (get cmd.exe PID via PowerShell parent chain)
@@ -183,13 +193,14 @@ if defined PYTHON_CMD (
     pause >nul
     goto :launch_codex
   )
-  echo   Starting config center http://127.0.0.1:17590 ...
-  echo   Select provider, fill key, test, save, then click "启动 Codex CLI".
-  echo(
-  REM Run config center in foreground (blocking) — waits for user to click "启动"
-  "!PYTHON_CMD!" "!CONFIG_SERVER!"
-  echo   Config center closed. Starting Codex CLI...
-  echo(
+  :: Skip config center, use AI-USB proxy instead
+  echo   [proxy] Starting API translation proxy on http://127.0.0.1:18080 ...
+  set "PROXY_SCRIPT=%LIB_DIR%\codex_proxy.py"
+  if exist "!PROXY_SCRIPT!" (
+    start /b "" "!PYTHON_CMD!" "!PROXY_SCRIPT!" > "%PORTABLE_DATA%\proxy.log" 2>&1
+    timeout /t 3 >nul 2>&1
+  )
+  goto :launch_codex
 ) else (
   echo   [!] No Python found. Config center cannot start.
   echo   Continuing with existing config...
@@ -210,6 +221,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%LIB_DIR%\binding.ps1" crea
 :: Set CODEX_HOME and launch
 echo   Mode: Direct ^| Data: portable folder
 echo(
+
+:: Set API key from auth.json
+if exist "%PORTABLE_CODEX%\auth.json" (
+  for /f "usebackq delims=" %%K in (`powershell -NoProfile -Command "Get-Content '%PORTABLE_CODEX%\auth.json' | ConvertFrom-Json | Select-Object -ExpandProperty OPENAI_API_KEY"`) do set "OPENAI_API_KEY=%%K"
+)
+
 set "CODEX_HOME=%PORTABLE_CODEX%"
 "%BIN_DIR%\codex.exe" %*
 goto :final_cleanup
@@ -227,6 +244,10 @@ exit /b 0
 if "!WE_STARTED_CCS!"=="1" (
   taskkill /im cc-switch.exe /t >nul 2>&1
   taskkill /f /im cc-switch.exe /t >nul 2>&1
+)
+:: Kill AI-USB proxy
+for /f "tokens=5" %%P in ('netstat -ano 2^>nul ^| findstr ":18080 " 2^>nul') do (
+  taskkill /pid %%P /f >nul 2>&1
 )
 call :remove_link "%SYS_CCS%"
 call :remove_link "%SYS_CODEX%"
